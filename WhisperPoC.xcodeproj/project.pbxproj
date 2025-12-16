@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		747086812EF12000007B94F3 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 747086822EF12000007B94F3 /* WhisperKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		747086642EF11F82007B94F3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -46,10 +50,6 @@
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
-
-/* Begin PBXBuildFile section */
-		747086812EF12000007B94F3 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 747086822EF12000007B94F3 /* WhisperKit */; };
-/* End PBXBuildFile section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		747086532EF11F81007B94F3 /* Frameworks */ = {
@@ -336,6 +336,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dominion525.WhisperPoC;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -393,6 +394,7 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dominion525.WhisperPoC;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
