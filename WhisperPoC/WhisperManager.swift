@@ -69,6 +69,7 @@ class WhisperManager: NSObject {
     private var audioPlayer: AVAudioPlayer?
     private var recordingTimer: Timer?
     private var playbackTimer: Timer?
+    private var memoryTimer: Timer?
 
     // 録音ファイルのURL
     var recordingURL: URL {
@@ -100,15 +101,37 @@ class WhisperManager: NSObject {
         return String(format: "%.1f MB", mb)
     }
 
+    // メモリ使用量を更新
+    func updateMemoryUsage() {
+        memoryUsage = getMemoryUsage()
+    }
+
+    // メモリ監視タイマー開始（5秒ごと）
+    private func startMemoryTimer() {
+        memoryTimer?.invalidate()
+        memoryTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            Task { @MainActor in
+                self.updateMemoryUsage()
+            }
+        }
+    }
+
+    // メモリ監視タイマー停止
+    private func stopMemoryTimer() {
+        memoryTimer?.invalidate()
+        memoryTimer = nil
+    }
+
     // MARK: - モデル解放
     func reset() {
         whisperKit = nil
         state = .idle
-        memoryUsage = 0
         recordingState = .idle
         transcriptionResult = ""
         transcriptionTime = 0
         statusMessage = "モデルを解放しました"
+        updateMemoryUsage()
     }
 
     // MARK: - WhisperKit初期化メソッド
@@ -131,6 +154,7 @@ class WhisperManager: NSObject {
                 self.state = .ready
                 self.memoryUsage = memory
                 self.statusMessage = "初期化完了! WhisperKitが使用可能です"
+                self.startMemoryTimer()
             }
 
         } catch {
