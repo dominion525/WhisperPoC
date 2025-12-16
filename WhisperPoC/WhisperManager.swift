@@ -147,10 +147,17 @@ class WhisperManager: NSObject {
             let config = WhisperKitConfig(model: modelName)
             let kit = try await WhisperKit(config)
 
+            await MainActor.run {
+                self.whisperKit = kit
+                self.statusMessage = "ウォームアップ中..."
+            }
+
+            // ウォームアップ実行
+            await warmup()
+
             let memory = getMemoryUsage()
 
             await MainActor.run {
-                self.whisperKit = kit
                 self.state = .ready
                 self.memoryUsage = memory
                 self.statusMessage = "初期化完了! WhisperKitが使用可能です"
@@ -162,6 +169,22 @@ class WhisperManager: NSObject {
                 self.state = .error(error.localizedDescription)
                 self.statusMessage = "エラー: \(error.localizedDescription)"
             }
+        }
+    }
+
+    // MARK: - ウォームアップ（初回推論のコンパイルを事前実行）
+    private func warmup() async {
+        guard let whisperKit = whisperKit,
+              let warmupURL = Bundle.main.url(forResource: "warmup", withExtension: "m4a") else {
+            return
+        }
+
+        do {
+            let options = DecodingOptions(language: "ja")
+            _ = try await whisperKit.transcribe(audioPath: warmupURL.path, decodeOptions: options)
+        } catch {
+            // ウォームアップ失敗は無視（本番の文字起こしには影響しない）
+            print("Warmup failed: \(error.localizedDescription)")
         }
     }
 
