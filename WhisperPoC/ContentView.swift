@@ -50,30 +50,63 @@ struct ContentView: View {
 
     // MARK: - WhisperKit初期化セクション
     private var whisperInitSection: some View {
-        HStack(spacing: 20) {
-            // 状態アイコン
-            whisperStateIcon
-                .font(.system(size: 40))
-
-            // 初期化ボタン
-            Button(action: {
-                Task {
-                    await manager.initialize()
+        VStack(spacing: 15) {
+            // モデル選択
+            HStack {
+                Text("モデル:")
+                    .font(.subheadline)
+                Picker("モデル", selection: $manager.selectedModel) {
+                    ForEach(WhisperModel.allCases, id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
                 }
-            }) {
-                Text(whisperButtonTitle)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(whisperButtonColor)
-                    .cornerRadius(8)
+                .pickerStyle(.menu)
+                .disabled(isModelPickerDisabled)
             }
-            .disabled(isWhisperButtonDisabled)
 
-            // ローディング
-            if isWhisperLoading {
-                ProgressView()
+            HStack(spacing: 20) {
+                // 状態アイコン
+                whisperStateIcon
+                    .font(.system(size: 40))
+
+                // 初期化ボタン
+                Button(action: {
+                    Task {
+                        await manager.initialize()
+                    }
+                }) {
+                    Text(whisperButtonTitle)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(whisperButtonColor)
+                        .cornerRadius(8)
+                }
+                .disabled(isWhisperButtonDisabled)
+
+                // リセットボタン（初期化完了後に表示）
+                if case .ready = manager.state {
+                    Button(action: {
+                        manager.reset()
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 20))
+                            .foregroundColor(.red)
+                    }
+                }
+
+                // ローディング
+                if isWhisperLoading {
+                    ProgressView()
+                }
+            }
+
+            // メモリ使用量（初期化完了後に表示）
+            if case .ready = manager.state {
+                Text("メモリ使用量: \(manager.formatMemory(manager.memoryUsage))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
     }
@@ -204,12 +237,9 @@ struct ContentView: View {
             case .idle:
                 Image(systemName: "waveform.circle")
                     .foregroundColor(.gray)
-            case .downloading:
+            case .initializing:
                 Image(systemName: "arrow.down.circle")
                     .foregroundColor(.blue)
-            case .loading:
-                Image(systemName: "cpu")
-                    .foregroundColor(.orange)
             case .ready:
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
@@ -224,10 +254,8 @@ struct ContentView: View {
         switch manager.state {
         case .idle:
             return "WhisperKit初期化"
-        case .downloading:
-            return "ダウンロード中..."
-        case .loading:
-            return "読み込み中..."
+        case .initializing:
+            return "初期化中..."
         case .ready:
             return "初期化完了"
         case .error:
@@ -238,7 +266,7 @@ struct ContentView: View {
     private var whisperButtonColor: Color {
         switch manager.state {
         case .idle: return .blue
-        case .downloading, .loading: return .gray
+        case .initializing: return .gray
         case .ready: return .green
         case .error: return .orange
         }
@@ -246,7 +274,7 @@ struct ContentView: View {
 
     private var isWhisperButtonDisabled: Bool {
         switch manager.state {
-        case .downloading, .loading, .ready:
+        case .initializing, .ready:
             return true
         case .idle, .error:
             return false
@@ -255,9 +283,18 @@ struct ContentView: View {
 
     private var isWhisperLoading: Bool {
         switch manager.state {
-        case .downloading, .loading:
+        case .initializing:
             return true
         default:
+            return false
+        }
+    }
+
+    private var isModelPickerDisabled: Bool {
+        switch manager.state {
+        case .initializing, .ready:
+            return true
+        case .idle, .error:
             return false
         }
     }

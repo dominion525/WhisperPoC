@@ -12,8 +12,7 @@ import WhisperKit
 // MARK: - 初期化状態を表す列挙型
 enum WhisperState {
     case idle           // 初期状態
-    case downloading    // モデルダウンロード中
-    case loading        // モデル読み込み中
+    case initializing   // 初期化中（ダウンロード＋読み込み）
     case ready          // 準備完了
     case error(String)  // エラー発生
 }
@@ -26,12 +25,33 @@ enum RecordingState {
     case playing        // 再生中
 }
 
+// MARK: - モデル選択
+enum WhisperModel: String, CaseIterable {
+    case tiny = "tiny"
+    case base = "base"
+    case small = "small"
+    case medium = "medium"
+    case largev3 = "large-v3"
+
+    var displayName: String {
+        switch self {
+        case .tiny: return "Tiny (~75MB)"
+        case .base: return "Base (~140MB)"
+        case .small: return "Small (~460MB)"
+        case .medium: return "Medium (~1.5GB)"
+        case .largev3: return "Large-v3 (~3GB)"
+        }
+    }
+}
+
 // MARK: - WhisperKit管理クラス
 @Observable
 class WhisperManager: NSObject {
     // MARK: - 公開プロパティ
     var state: WhisperState = .idle
     var statusMessage: String = "初期化前"
+    var selectedModel: WhisperModel = .tiny
+    var memoryUsage: UInt64 = 0  // メモリ使用量（バイト）
 
     // 録音関連
     var recordingState: RecordingState = .idle
@@ -63,26 +83,53 @@ class WhisperManager: NSObject {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
+    // MARK: - メモリ使用量取得
+    func getMemoryUsage() -> UInt64 {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? info.resident_size : 0
+    }
+
+    func formatMemory(_ bytes: UInt64) -> String {
+        let mb = Double(bytes) / 1024 / 1024
+        return String(format: "%.1f MB", mb)
+    }
+
+    // MARK: - モデル解放
+    func reset() {
+        whisperKit = nil
+        state = .idle
+        memoryUsage = 0
+        recordingState = .idle
+        transcriptionResult = ""
+        transcriptionTime = 0
+        statusMessage = "モデルを解放しました"
+    }
+
     // MARK: - WhisperKit初期化メソッド
     func initialize() async {
+        let modelName = selectedModel.rawValue
+
         await MainActor.run {
-            self.state = .downloading
-            self.statusMessage = "モデルをダウンロード中..."
+            self.state = .initializing
+            self.statusMessage = "\(selectedModel.displayName) を初期化中..."
         }
 
         do {
-            let config = WhisperKitConfig(model: "tiny")
-
-            await MainActor.run {
-                self.state = .loading
-                self.statusMessage = "モデルを読み込み中..."
-            }
-
+            let config = WhisperKitConfig(model: modelName)
             let kit = try await WhisperKit(config)
+
+            let memory = getMemoryUsage()
 
             await MainActor.run {
                 self.whisperKit = kit
                 self.state = .ready
+                self.memoryUsage = memory
                 self.statusMessage = "初期化完了! WhisperKitが使用可能です"
             }
 
@@ -106,7 +153,7 @@ class WhisperManager: NSObject {
             return
         }
 
-        // 録音設定
+        // 録音設定（AAC 16kHz モノラル）
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 16000,  // WhisperKitは16kHzを推奨
