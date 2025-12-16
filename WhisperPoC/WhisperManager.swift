@@ -52,6 +52,14 @@ class WhisperManager: NSObject {
     var statusMessage: String = "初期化前"
     var selectedModel: WhisperModel = .tiny
     var memoryUsage: UInt64 = 0  // メモリ使用量（バイト）
+    var memoryUpdatedAt: Date = Date()  // メモリ更新時刻
+
+    // MARK: - 初期化
+    override init() {
+        super.init()
+        memoryUsage = getMemoryUsage()
+        startMemoryTimer()
+    }
 
     // 録音関連
     var recordingState: RecordingState = .idle
@@ -104,6 +112,14 @@ class WhisperManager: NSObject {
     // メモリ使用量を更新
     func updateMemoryUsage() {
         memoryUsage = getMemoryUsage()
+        memoryUpdatedAt = Date()
+    }
+
+    // 時刻フォーマット（HH:mm:ss）
+    func formatTimeOfDay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: date)
     }
 
     // メモリ監視タイマー開始（5秒ごと）
@@ -161,7 +177,6 @@ class WhisperManager: NSObject {
                 self.state = .ready
                 self.memoryUsage = memory
                 self.statusMessage = "初期化完了! WhisperKitが使用可能です"
-                self.startMemoryTimer()
             }
 
         } catch {

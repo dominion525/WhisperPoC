@@ -102,12 +102,10 @@ struct ContentView: View {
                 }
             }
 
-            // メモリ使用量（初期化完了後に表示）
-            if case .ready = manager.state {
-                Text("メモリ使用量: \(manager.formatMemory(manager.memoryUsage))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+            // メモリ使用量（常に表示）
+            Text("メモリ使用量: \(manager.formatMemory(manager.memoryUsage)) (\(manager.formatTimeOfDay(manager.memoryUpdatedAt)))")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
 
