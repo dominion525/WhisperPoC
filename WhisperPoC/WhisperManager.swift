@@ -38,6 +38,11 @@ class WhisperManager: NSObject {
     var recordingDuration: TimeInterval = 0
     var playbackCurrentTime: TimeInterval = 0
 
+    // 文字起こし関連
+    var isTranscribing: Bool = false
+    var transcriptionResult: String = ""
+    var transcriptionTime: TimeInterval = 0
+
     // MARK: - 非公開プロパティ
     private var whisperKit: WhisperKit?
     private var audioRecorder: AVAudioRecorder?
@@ -173,6 +178,50 @@ class WhisperManager: NSObject {
         playbackCurrentTime = 0
         recordingState = .recorded
         statusMessage = "再生停止"
+    }
+
+    // MARK: - 文字起こし
+    func transcribe() async {
+        guard let whisperKit = whisperKit else {
+            await MainActor.run {
+                statusMessage = "WhisperKitが初期化されていません"
+            }
+            return
+        }
+
+        await MainActor.run {
+            isTranscribing = true
+            transcriptionResult = ""
+            statusMessage = "文字起こし中..."
+        }
+
+        let startTime = Date()
+
+        do {
+            // 日本語を指定
+            let options = DecodingOptions(language: "ja")
+            let results = try await whisperKit.transcribe(audioPath: recordingURL.path, decodeOptions: options)
+            let endTime = Date()
+            let elapsed = endTime.timeIntervalSince(startTime)
+
+            await MainActor.run {
+                if let result = results.first {
+                    transcriptionResult = result.text
+                } else {
+                    transcriptionResult = "(文字起こし結果なし)"
+                }
+                transcriptionTime = elapsed
+                isTranscribing = false
+                statusMessage = String(format: "文字起こし完了 (%.2f秒)", elapsed)
+            }
+
+        } catch {
+            await MainActor.run {
+                transcriptionResult = "エラー: \(error.localizedDescription)"
+                isTranscribing = false
+                statusMessage = "文字起こしエラー"
+            }
+        }
     }
 }
 

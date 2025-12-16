@@ -35,6 +35,12 @@ struct ContentView: View {
             if case .ready = manager.state {
                 Divider()
                 recordingSection
+
+                // 録音完了後に文字起こしセクションを表示
+                if manager.recordingState == .recorded || manager.recordingState == .playing {
+                    Divider()
+                    transcriptionSection
+                }
             }
 
             Spacer()
@@ -117,6 +123,77 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
         }
         .padding()
+    }
+
+    // MARK: - 文字起こしセクション
+    private var transcriptionSection: some View {
+        VStack(spacing: 15) {
+            // 文字起こしボタン
+            Button(action: {
+                Task {
+                    await manager.transcribe()
+                }
+            }) {
+                HStack {
+                    if manager.isTranscribing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "text.bubble")
+                    }
+                    Text(manager.isTranscribing ? "文字起こし中..." : "文字起こし")
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.horizontal, 30)
+                .padding(.vertical, 12)
+                .background(manager.isTranscribing ? Color.gray : Color.purple)
+                .cornerRadius(10)
+            }
+            .disabled(manager.isTranscribing || manager.recordingState == .playing)
+
+            // 処理時間表示
+            if manager.transcriptionTime > 0 {
+                let speedRatio = manager.recordingDuration / manager.transcriptionTime
+                Text(String(format: "処理時間: %.2f秒 (%.1fx)", manager.transcriptionTime, speedRatio))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            // 結果表示エリア
+            if !manager.transcriptionResult.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("文字起こし結果:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        // コピーボタン
+                        Button(action: {
+                            UIPasteboard.general.string = manager.transcriptionResult
+                        }) {
+                            Label("コピー", systemImage: "doc.on.doc")
+                                .font(.caption)
+                        }
+                    }
+
+                    ScrollView {
+                        Text(manager.transcriptionResult)
+                            .font(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                            .padding()
+                    }
+                    .frame(maxHeight: 150)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
+                .padding(.horizontal)
+            }
+        }
     }
 
     // MARK: - WhisperKit関連のコンピューテッドプロパティ
