@@ -264,6 +264,43 @@ class SpeechAnalyzerManager: NSObject {
         statusMessage = "再生停止"
     }
 
+    // MARK: - ファイルURL指定の文字起こし（ベンチマーク用）
+    func transcribeFile(at url: URL) async throws -> String {
+        // 新しいトランスクライバーを作成（各転写セッションで新規作成が必要）
+        let sessionTranscriber = SpeechTranscriber(
+            locale: selectedLocale,
+            transcriptionOptions: [],
+            reportingOptions: [],
+            attributeOptions: []
+        )
+
+        // SpeechAnalyzer でファイルを転写
+        let analyzer = SpeechAnalyzer(modules: [sessionTranscriber])
+
+        // 結果を収集するタスク
+        let transcriptionTask = Task {
+            var result = ""
+            for try await segment in sessionTranscriber.results {
+                if segment.isFinal {
+                    result += String(segment.text.characters)
+                }
+            }
+            return result
+        }
+
+        // 音声ファイルを開く
+        let audioFile = try AVAudioFile(forReading: url)
+
+        // 音声ファイルを分析
+        if let lastSample = try await analyzer.analyzeSequence(from: audioFile) {
+            try await analyzer.finalizeAndFinish(through: lastSample)
+        } else {
+            await analyzer.cancelAndFinishNow()
+        }
+
+        return try await transcriptionTask.value
+    }
+
     // MARK: - 文字起こし
     func transcribe() async {
         guard speechTranscriber != nil else {

@@ -71,8 +71,8 @@ class WhisperManager: NSObject {
     var transcriptionResult: String = ""
     var transcriptionTime: TimeInterval = 0
 
-    // MARK: - 非公開プロパティ
-    private var whisperKit: WhisperKit?
+    // MARK: - 内部プロパティ（ベンチマーク用に公開）
+    var whisperKit: WhisperKit?
     private var audioRecorder: AVAudioRecorder?
     private var audioPlayer: AVAudioPlayer?
     private var recordingTimer: Timer?

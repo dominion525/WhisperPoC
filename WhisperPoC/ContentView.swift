@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var selectedEngine: EngineType = .whisperKit
     @State private var whisperManager = WhisperManager()
     @State private var speechAnalyzerManager = SpeechAnalyzerManager()
+    @State private var benchmarkManager = BenchmarkManager()
 
     // MARK: - ビュー本体
     var body: some View {
@@ -62,11 +63,287 @@ struct ContentView: View {
                     Divider()
                     transcriptionSection
                 }
+
+                Divider()
+                benchmarkSection
             }
 
             Spacer()
         }
         .padding()
+    }
+
+    // MARK: - ベンチマークセクション
+    private var benchmarkSection: some View {
+        VStack(spacing: 15) {
+            Text("ベンチマーク")
+                .font(.headline)
+
+            // 状態表示
+            HStack {
+                Text(benchmarkStatusText)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                HStack(spacing: 4) {
+                    Image(systemName: thermalStateIcon)
+                        .foregroundColor(thermalStateColor)
+                    Text(thermalStateText)
+                        .font(.caption)
+                        .foregroundColor(thermalStateColor)
+                }
+            }
+
+            // 実行/停止ボタン
+            HStack(spacing: 20) {
+                Button(action: {
+                    Task {
+                        benchmarkManager.configure(
+                            whisperManager: whisperManager,
+                            speechAnalyzerManager: speechAnalyzerManager,
+                            engine: selectedEngine
+                        )
+                        await benchmarkManager.runBenchmark()
+                    }
+                }) {
+                    HStack {
+                        if isBenchmarkRunning {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: "play.fill")
+                        }
+                        Text("実行")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(canStartBenchmark ? Color.blue : Color.gray)
+                    .cornerRadius(8)
+                }
+                .disabled(!canStartBenchmark)
+
+                // キャンセルボタン
+                if isBenchmarkRunning {
+                    Button(action: {
+                        benchmarkManager.cancel()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.red)
+                    }
+                }
+
+                // リセットボタン
+                if case .completed = benchmarkManager.state {
+                    Button(action: {
+                        benchmarkManager.reset()
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 20))
+                            .foregroundColor(.orange)
+                    }
+                }
+
+                if case .error = benchmarkManager.state {
+                    Button(action: {
+                        benchmarkManager.reset()
+                    }) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 20))
+                            .foregroundColor(.orange)
+                    }
+                }
+            }
+
+            // 進捗バー
+            if case .processing(let current, let total, _) = benchmarkManager.state {
+                ProgressView(value: Double(current), total: Double(total))
+                    .padding(.horizontal)
+                Text("\(current) / \(total) ファイル処理中")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            // 結果一覧
+            if !benchmarkManager.results.isEmpty {
+                benchmarkResultsView
+            }
+
+            // サマリー
+            if case .completed = benchmarkManager.state {
+                benchmarkSummaryView
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+
+    private var benchmarkResultsView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("処理結果:")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(benchmarkManager.results) { result in
+                        HStack {
+                            // ステータスアイコン
+                            benchmarkStatusIcon(for: result.status)
+                                .frame(width: 20)
+
+                            // ファイル名
+                            Text(result.fileName)
+                                .font(.caption)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            // 処理時間
+                            if let time = result.processingTime {
+                                Text(String(format: "%.2fs", time))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            // CER
+                            if let cer = result.cer {
+                                Text(String(format: "CER: %.1f%%", cer * 100))
+                                    .font(.caption)
+                                    .foregroundColor(cerColor(cer))
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+            .frame(maxHeight: 150)
+        }
+    }
+
+    private var benchmarkSummaryView: some View {
+        VStack(spacing: 8) {
+            Divider()
+
+            HStack {
+                Text("合計処理時間:")
+                Spacer()
+                Text(String(format: "%.2f秒", benchmarkManager.totalProcessingTime))
+                    .fontWeight(.bold)
+            }
+
+            if let avgCER = benchmarkManager.averageCER {
+                HStack {
+                    Text("平均CER:")
+                    Spacer()
+                    Text(String(format: "%.1f%%", avgCER * 100))
+                        .fontWeight(.bold)
+                        .foregroundColor(cerColor(avgCER))
+                }
+            }
+        }
+        .font(.subheadline)
+    }
+
+    @ViewBuilder
+    private func benchmarkStatusIcon(for status: BenchmarkFileResult.FileStatus) -> some View {
+        switch status {
+        case .pending:
+            Image(systemName: "circle")
+                .foregroundColor(.gray)
+        case .downloading:
+            Image(systemName: "arrow.down.circle")
+                .foregroundColor(.blue)
+        case .transcribing:
+            Image(systemName: "waveform")
+                .foregroundColor(.orange)
+        case .uploading:
+            Image(systemName: "arrow.up.circle")
+                .foregroundColor(.purple)
+        case .completed:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+        case .error:
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(.red)
+        }
+    }
+
+    private func cerColor(_ cer: Double) -> Color {
+        if cer < 0.05 { return .green }
+        if cer < 0.10 { return .orange }
+        return .red
+    }
+
+    private var canStartBenchmark: Bool {
+        guard isEngineReady else { return false }
+        switch benchmarkManager.state {
+        case .idle, .completed, .error:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var isBenchmarkRunning: Bool {
+        switch benchmarkManager.state {
+        case .fetchingFiles, .processing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var benchmarkStatusText: String {
+        switch benchmarkManager.state {
+        case .idle:
+            return "待機中"
+        case .fetchingFiles:
+            return "ファイルリスト取得中..."
+        case .processing(let current, let total, let phase):
+            let phaseText: String
+            switch phase {
+            case .downloading:
+                phaseText = "ダウンロード中"
+            case .transcribing:
+                phaseText = "文字起こし中"
+            case .uploading:
+                phaseText = "結果送信中"
+            }
+            return "\(phaseText) (\(current)/\(total))"
+        case .completed:
+            return "完了"
+        case .error(let message):
+            return "エラー: \(message)"
+        }
+    }
+
+    private var thermalStateText: String {
+        benchmarkManager.thermalStateString(benchmarkManager.thermalState)
+    }
+
+    private var thermalStateIcon: String {
+        switch benchmarkManager.thermalState {
+        case .nominal: return "thermometer.low"
+        case .fair: return "thermometer.medium"
+        case .serious: return "thermometer.high"
+        case .critical: return "thermometer.sun.fill"
+        @unknown default: return "thermometer"
+        }
+    }
+
+    private var thermalStateColor: Color {
+        switch benchmarkManager.thermalState {
+        case .nominal: return .green
+        case .fair: return .yellow
+        case .serious: return .orange
+        case .critical: return .red
+        @unknown default: return .gray
+        }
     }
 
     // MARK: - 現在のエンジンの状態
